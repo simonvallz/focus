@@ -1,5 +1,7 @@
 #import "Objective_C";
 #import "Objective_C/AppKit";
+#import "Process";
+#import "Command_Line";
 
 window_minimized := false; // @@ Hack.
 
@@ -632,6 +634,8 @@ create_app_delegate :: () -> *App_Delegate {
         objc_add_instance_method(ad_class, App_Delegate.applicationDidBecomeActive, "applicationDidBecomeActive:");
         objc_add_instance_method(ad_class, App_Delegate.applicationDidFinishLaunching, "applicationDidFinishLaunching:");
         objc_add_instance_method(ad_class, App_Delegate.applicationOpenFiles, "application:openFiles:");
+        objc_add_instance_method(ad_class, App_Delegate.applicationDockMenu, "applicationDockMenu:");
+        objc_add_instance_method(ad_class, App_Delegate.newInstance, "newInstance");
         objc_finalize_class(ad_class);
     }
 
@@ -735,6 +739,30 @@ App_Delegate :: struct {
             NSApplication.postEvent(sender, nsev, YES);
 
             NSApplication.replyToOpenOrPrint(sender, 0);
+        }
+    }
+
+    applicationDockMenu :: (self: *App_Delegate, _sel: Selector, sender: *NSApplication) -> *NSMenu #c_call {
+        S :: NSString.getTempString;
+
+        dock_menu := objc_init(objc_alloc(NSMenu));
+
+        ctx: Context;
+        push_context ctx {
+            dock_menu.addItemWithTitle(dock_menu, S("New instance"), selector("newInstance"), S(""));
+        }
+
+        autorelease(dock_menu);
+
+        return dock_menu;
+    }
+
+    newInstance :: (self: *App_Delegate, _sel: Selector) #c_call {
+        ctx: Context;
+        push_context ctx {
+            new_window_process := Process.{};
+            focus_executable_args := get_command_line_arguments();
+            create_process(*new_window_process, ..focus_executable_args, "", capture_and_return_output = false, arg_quoting = Process_Argument_Quoting.QUOTE_IF_NEEDED, kill_process_if_parent_exits = true);
         }
     }
 }

@@ -2989,7 +2989,8 @@ delete_to_start_of_line :: (editor: *Editor, buffer: *Buffer) {
         cursor.col_wanted = -1;
     }
     organise_cursors(editor);  // resolve overlapping selections
-    copy_selection_to_clipboard(editor, buffer, cut = true, cut_lines_without_selection = false);
+    //copy_selection_to_clipboard(editor, buffer, cut = true, cut_lines_without_selection = false);
+    cut_selection(editor, buffer);
 }
 
 delete_to_end_of_line :: (editor: *Editor, buffer: *Buffer) {
@@ -2998,7 +2999,23 @@ delete_to_end_of_line :: (editor: *Editor, buffer: *Buffer) {
         cursor.pos = get_real_line_end_offset(buffer, offset_to_real_line(buffer, cursor.pos));
     }
     organise_cursors(editor);  // resolve overlapping selections
-    copy_selection_to_clipboard(editor, buffer, cut = true, cut_lines_without_selection = false);
+    //copy_selection_to_clipboard(editor, buffer, cut = true, cut_lines_without_selection = false);
+    cut_selection(editor, buffer);
+}
+
+cut_selection :: (editor: *Editor, buffer: *Buffer) {
+    offset_delta := 0;
+    for * cursor : editor.cursors {
+        cursor.pos -= xx offset_delta;
+        cursor.sel -= xx offset_delta;
+        selection := get_selection(cursor);
+        delete_range(buffer, selection);
+        cursor.col_wanted = -1;
+        cursor.pos = selection.start;
+        cursor.sel = cursor.pos;
+        offset_delta += selection.end - selection.start;
+    }
+    editor.cursor_moved = .refresh_only;
 }
 
 copy_selection_to_clipboard :: (editor: *Editor, buffer: *Buffer, cut := false, cut_lines_without_selection := true) {
