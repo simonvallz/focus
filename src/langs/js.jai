@@ -76,6 +76,7 @@ get_next_token :: (using tokenizer: *Tokenizer) -> Token {
         case #char ")";  token.type = .punctuation; token.punctuation = .r_paren;   t += 1;
         case #char "[";  token.type = .punctuation; token.punctuation = .l_bracket; t += 1;
         case #char "]";  token.type = .punctuation; token.punctuation = .r_bracket; t += 1;
+        case #char "$";  token.type = .punctuation; token.punctuation = .dollar;    t += 1;
 
         case #char "~";  token.type = .operation;   token.operation   = .tilde;     t += 1;
 
@@ -436,6 +437,7 @@ Token :: struct {
 
 PUNCTUATION :: string.[
     "semicolon", "backslash", "l_paren", "r_paren", "l_brace", "r_brace", "l_bracket", "r_bracket", "period", "comma",
+    "dollar",
 ];
 
 OPERATIONS :: string.[
