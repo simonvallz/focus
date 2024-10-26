@@ -441,6 +441,9 @@ maybe_execute_a_build_command :: (action: Action_Build) -> handled: bool {
 init_fonts_and_dependent_things :: () {
     push_allocator(focus_allocator);  // we sometimes call this from within a temp allocator
 
+    Simp.set_anti_aliasing(config.style.font_anti_aliasing);
+    Simp.set_hinting(config.style.font_hinting);
+
     font_main_size = clamp(font_main_size, MIN_FONT_SIZE, MAX_FONT_SIZE);
     font_ui_size   = clamp(font_ui_size  , MIN_FONT_SIZE, MAX_FONT_SIZE);
 
@@ -603,6 +606,8 @@ update_mouse_state :: () {
     update_button(*mouse.left,   .MOUSE_BUTTON_LEFT);
     update_button(*mouse.right,  .MOUSE_BUTTON_RIGHT);
     update_button(*mouse.middle, .MOUSE_BUTTON_MIDDLE);
+    update_button(*mouse.x1,     .MOUSE_BUTTON_X1);
+    update_button(*mouse.x2,     .MOUSE_BUTTON_X2);
 }
 
 editor_toggle_fullscreen :: () {
@@ -775,6 +780,8 @@ Mouse_State :: struct {
     left:   Mouse_Button_State;
     right:  Mouse_Button_State;
     middle: Mouse_Button_State;
+    x1: Mouse_Button_State;
+    x2: Mouse_Button_State;
 
     last_wheel_y_time64: float64;
     wheel_y_mode : enum {

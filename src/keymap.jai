@@ -356,6 +356,8 @@ ACTIONS_COMMON :: string.[
 
 ACTIONS_EDITORS :: #run arrays_concat(ACTIONS_COMMON, string.[
     "select_word_or_create_another_cursor",
+    "revert_select_word_or_create_another_cursor",
+    "move_selection_to_next_word",
     "select_all_occurrences",
     "create_cursor_above",
     "create_cursor_below",
@@ -437,6 +439,8 @@ ACTIONS_SEARCH_DIALOG :: #run arrays_concat(ACTIONS_COMMON, string.[
     "toggle_case_sensitive",
     "toggle_whole_word",
     "toggle_regex_search",
+    "go_to_next_input",
+    "go_to_previous_input",
 ]);
 
 

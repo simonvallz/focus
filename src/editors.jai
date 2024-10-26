@@ -203,6 +203,9 @@ active_editor_handle_event :: (editor: *Editor, buffer: *Buffer, event: Input.Ev
         case .select_word_or_create_another_cursor; enabled_whole_words = select_word_or_create_another_cursor(editor, buffer); keep_selection = true;
         case .select_all_occurrences;               enabled_whole_words = select_all_occurrences              (editor, buffer); keep_selection = true;
 
+        case .revert_select_word_or_create_another_cursor; revert_select_word_or_create_another_cursor(editor, buffer); keep_selection = true;
+        case .move_selection_to_next_word;                 move_selection_to_next_word(editor, buffer);                 keep_selection = true;
+
         case .toggle_line_wrap;                 toggle_line_wrap                    (editor);
         case .toggle_line_numbers;              toggle_line_numbers                 ();
         case .copy_current_line_info;           copy_current_line_info              (editor, buffer);
@@ -1322,64 +1325,13 @@ select_line :: (cursor: *Cursor, buffer: Buffer) {
     cursor.pos = get_real_line_start_offset(buffer, end_line+1);
 }
 
-scan_through_similar_chars_on_the_left :: (using buffer: Buffer, offset: s32, char_type: Char_Type = .none, skip_one_space := true) -> offset: s32 {
-    if !buffer.bytes return 0;
-
-    line_start := bytes.data + line_starts[offset_to_real_line(buffer, offset)];
-    char: u32;
-    t := bytes.data + offset;
-    t, char = unicode_prev_character(t);
-    if char_type != .none && char_type != get_char_type(char) return offset;
-    if skip_one_space && is_unicode_space(char) && t > line_start then t, char = unicode_prev_character(t);
-
-    if get_char_type(char) == {
-        case .space;
-            while t > bytes.data && is_space_or_underscore(char)  { t, char = unicode_prev_character(t); }
-            if !is_unicode_space(char) then t = unicode_next_character(t);
-        case .word;
-            while t > bytes.data && is_word_char(char) { t, char = unicode_prev_character(t); }
-            if !is_word_char(char) then t = unicode_next_character(t);
-        case .non_word;
-            while t > bytes.data && is_non_word_char(char) { t, char = unicode_prev_character(t); }
-            if !is_non_word_char(char) then t = unicode_next_character(t);
-    }
-
-    if t < bytes.data then t = bytes.data;
-
-    return cast(s32) max(0, t - bytes.data);
+scan_through_similar_chars_on_the_left :: inline (using buffer: Buffer, offset: s32, char_type: Char_Type = .none, skip_one_space := true) -> offset: s32 {
+    line_start_offset := line_starts[offset_to_real_line(buffer, offset)];
+    return scan_through_similar_chars_on_the_left(to_view(buffer.bytes), line_start_offset, offset, char_type, skip_one_space);
 }
 
-scan_through_similar_chars_on_the_right :: (using buffer: Buffer, offset: s32, only: Char_Type = .none, skip_one_space := true) -> offset: s32 {
-    if !buffer.bytes return 0;
-    if offset >= bytes.count return offset;  // nowhere to go
-
-    s: string = ---;
-    s.data  = *bytes[offset];
-    s.count = (bytes.data + bytes.count) - s.data;
-
-    char := utf8_next_character(*s);
-    if only == {
-        case .word;     if !is_word_char(char)     return offset;
-        case .non_word; if !is_non_word_char(char) return offset;
-        case .space;    if !is_unicode_space(char) return offset;
-    }
-    if skip_one_space && is_unicode_space(char) && s then char = utf8_next_character(*s);
-
-    if is_space_or_underscore(char) {
-        // Only spaces
-        while s && is_space_or_underscore(char)  { char = utf8_next_character(*s); }
-        if !is_unicode_space(char) { s.data, char = unicode_prev_character(s.data); }
-    } else if is_word_char(char) {
-        // Only word chars
-        while s && is_word_char(char) { char = utf8_next_character(*s); }
-        if !is_word_char(char) { s.data, char = unicode_prev_character(s.data); }
-    } else if !is_unicode_linebreak(char) {
-        // Only non-word chars
-        while s && is_non_word_char(char) { char = utf8_next_character(*s); }
-        if !is_non_word_char(char) { s.data, char = unicode_prev_character(s.data); }
-    }
-
-    return min(bytes.count, cast(s32)(s.data - bytes.data));
+scan_through_similar_chars_on_the_right :: inline (buffer: Buffer, offset: s32, char_type: Char_Type = .none, skip_one_space := true) -> offset: s32 {
+    return scan_through_similar_chars_on_the_right(to_view(buffer.bytes), offset, char_type, skip_one_space);
 }
 
 cursors_start_blinking :: inline () {
@@ -1792,6 +1744,69 @@ select_word_or_create_another_cursor :: (using editor: *Editor, buffer: Buffer) 
     return editor.search_whole_words;
 }
 
+revert_select_word_or_create_another_cursor :: (using editor: *Editor, buffer: *Buffer) {
+    if cursors.count == 1 {
+        cursor := *cursors[0];
+        cursor.pos = cursor.sel;
+    } else if !get_selected_text_all_cursors(editor, buffer) {
+        // If we have multiple cursors and their selected text is not the same, we do nothing.
+        // While we could remove the selections of those cursors, this approach seems unintuitive.
+    } else {
+        organise_cursors(editor);
+
+        // The main_cursor is the cursor most recently added by select_word_or_create_another_cursor().
+        // When every instance of the word is selected, the selection will wrap back to the original_cursor.
+        // Therefore, this function will delete the main_cursor, except when the original_cursor
+        // and main_cursor are the same. In that case, we need to delete the cursor positioned
+        // "above" the main_cursor to maintain consistency with the general editor behavior.
+        if original_cursor == main_cursor {
+            main_cursor -= 1;
+            if main_cursor < 0 then main_cursor = cursors.count - 1;
+        }
+        old_main_cursor := main_cursor;
+
+        ordered_remove_by_index(*cursors, main_cursor);
+
+        main_cursor -= 1;
+        if main_cursor < 0 then main_cursor = cursors.count - 1;
+        if original_cursor > old_main_cursor then original_cursor -= 1;
+    }
+    cursor_moved = .selection;
+
+    assert(main_cursor     < cursors.count);
+    assert(original_cursor < cursors.count);
+}
+
+move_selection_to_next_word :: (using editor: *Editor, buffer: Buffer) {
+    if !get_selected_text_all_cursors(editor, buffer) return;
+
+    organise_cursors(editor);
+    old_main_cursor := main_cursor;
+
+    select_word_or_create_another_cursor(editor, buffer);
+    if cursors.count == 1 return;
+
+    ordered_remove_by_index(*cursors, old_main_cursor);
+
+    if old_main_cursor == main_cursor {
+        // We have deleted the main_cursor. This happens if the select_word_or_create_another_cursor
+        // call does not change the main_cursor. In this case we select the 'next' cursor as the main_cursor,
+        // wrapping around if needed.
+        main_cursor = ifx main_cursor >= cursors.count then 0 else main_cursor;
+    } else if old_main_cursor < main_cursor {
+        main_cursor -= 1;
+    }
+
+    if old_main_cursor == original_cursor {
+        original_cursor = main_cursor;
+    } else if old_main_cursor < original_cursor {
+        original_cursor -= 1;
+    }
+
+    assert(main_cursor     < cursors.count);
+    assert(original_cursor < cursors.count);
+}
+
 select_all_occurrences :: (using editor: *Editor, buffer: Buffer, search_str := "") -> whole_words: bool {
     editor.cursor_moved = .has_not_moved;
 
@@ -2097,22 +2112,27 @@ is_a_move_action :: (action: Action_Editors) -> bool {
     return false;
 }
 
+// @Copypasta to text_input.jai - remember to update it if amending this!
 move_cursors_left :: (editor: *Editor, using buffer: *Buffer, by: enum { char; word; word_ends; }, extend_selection: bool) {
-    skip_one_space := editor.cursors.count == 1;
+    is_single_cursor := editor.cursors.count == 1;
 
     for * cursor : editor.cursors {
         if has_selection(cursor) && !extend_selection {
             cursor.pos = get_selection(cursor).start;
-        } else if by == .char {
-            if cursor.pos > 0 then cursor.pos = prev_char_offset(bytes, cursor.pos);
+        } else if cursor.pos == 0 {
+            continue;
         } else {
             if by == {
+                case .char;
+                    cursor.pos = prev_char_offset(bytes, cursor.pos);
+
                 case .word;
-                    cursor.pos = scan_through_similar_chars_on_the_left(buffer, cursor.pos, skip_one_space = skip_one_space,, underscore_is_part_of_word = false);
+                    cursor.pos = scan_through_similar_chars_on_the_left(buffer, cursor.pos, skip_one_space = is_single_cursor,, underscore_is_part_of_word = false);
+
                 case .word_ends;
-                    char_type := get_char_type(get_char_at_offset(buffer, cursor.pos));
+                    char_type := get_char_type(get_char_at_offset(buffer, prev_char_offset(bytes, cursor.pos)));
                     if char_type != .word then cursor.pos = scan_through_similar_chars_on_the_left(buffer, cursor.pos, char_type, skip_one_space = false);
-                    cursor.pos = scan_through_similar_chars_on_the_left(buffer, cursor.pos, skip_one_space = skip_one_space);
+                    cursor.pos = scan_through_similar_chars_on_the_left(buffer, cursor.pos, skip_one_space = is_single_cursor);
             }
         }
         cursor.col_wanted = -1;
@@ -2120,26 +2140,29 @@ move_cursors_left :: (editor: *Editor, using buffer: *Buffer, by: enum { char; w
     editor.cursor_moved = .unimportant;
 }
 
+// @Copypasta to text_input.jai - remember to update it if amending this!
 move_cursors_right :: (editor: *Editor, using buffer: *Buffer, by: enum { char; word; word_ends; }, extend_selection: bool) {
-    skip_one_space := editor.cursors.count == 1;
+    is_single_cursor := editor.cursors.count == 1;
 
     for * cursor : editor.cursors {
-        if cursor.pos >= bytes.count continue;  // nowhere to go
-
         if has_selection(cursor) && !extend_selection {
             cursor.pos = get_selection(cursor).end;
-        } else if by == .char {
-            cursor.pos = next_char_offset(bytes, cursor.pos);
+        } else if cursor.pos >= bytes.count {
+            continue;
         } else {
             if by == {
+                case .char;
+                    cursor.pos = next_char_offset(bytes, cursor.pos);
+
                 case .word;
-                    cursor.pos = scan_through_similar_chars_on_the_right(buffer, cursor.pos, skip_one_space = skip_one_space,, underscore_is_part_of_word = false);
+                    cursor.pos = scan_through_similar_chars_on_the_right(buffer, cursor.pos, skip_one_space = is_single_cursor,, underscore_is_part_of_word = false);
+
                 case .word_ends;
                     char := get_char_at_offset(buffer, cursor.pos);
                     char_type := get_char_type(char);
                     if char_type != .word  then cursor.pos = scan_through_similar_chars_on_the_right(buffer, cursor.pos, char_type, skip_one_space = false);
                     char_type = get_char_type(get_char_at_offset(buffer, cursor.pos));
-                    if char_type != .other && !is_unicode_linebreak(char) then cursor.pos = scan_through_similar_chars_on_the_right(buffer, cursor.pos, skip_one_space = skip_one_space);
+                    if char_type != .other && !is_unicode_linebreak(char) then cursor.pos = scan_through_similar_chars_on_the_right(buffer, cursor.pos, skip_one_space = is_single_cursor);
             }
         }
         cursor.col_wanted = -1;
@@ -3775,6 +3798,7 @@ Text_Highlight :: struct {
     offset: s32;    // we'll convert this to position range, but only for the visible highlights
     count: s32;
     line: s32;      // useful to know the line number to display in the scrollbar area
+    type: enum u8 { text; bracket; } = .text;
 }
 
 Paste_Animation :: struct {

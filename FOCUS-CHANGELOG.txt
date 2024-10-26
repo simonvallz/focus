@@ -1,6 +1,7 @@
 # Main Git Branch
 
 + New features:
+    + Global search now allows to additionally filter results by including and excluding files
     + Syntax highlighting:
         + Batch (thanks @arjenwitteveen)
     + It is now possible to pass a line number together with the file path to the editor on startup: `focus /path/to/file:69` (thanks @simonvallz)
@@ -10,14 +11,29 @@
         + `change_case_to_caps` - will capitalize the first letter, and any letter following a non-letter character (my_foo_type -> My_Foo_Type)
         + `change_case_cycle` - will cycle through the options below. Bound to `Ctrl-U` by default
     + New action `create_cursors_around`. Creates cursors above and below so that they extend up to the surrounding whitespace (thanks @onelivesleft)
-    + Added support for F13-F24 in keybindings
+    + New actions for creating, moving and deleting cursors (thanks @BuzzwordChief):
+        + `move_selection_to_next_word` (`Ctrl-Y`) - instead of creating a new cursor at the next occurrence it will move the current cursor, allowing you to skip an occurrence
+        + `revert_select_word_or_create_another_cursor` (`Ctrl-R`) - removes the newly created selection
     + New font options in the style section - `font_ui`, `font_ui_bold`, `font_ui_size` (thanks @hfr4)
+    + Windows rmenu key can now be used in keybinds as `cmd` (thanks @onelivesleft)
+    + New bindable keys: `MouseX1` and `MouseX2` (thanks @onelivesleft)
+    + New available colors:
+        + `ruler` for the vertical ruler, if enabled
+        + `indent_guide` for indent guides, if enabled
+        + `bracket_highlight` for highlighting matching brackets
+    + In `[ignore]` and `[allow]` sections of the workspace paths starting with `./` can now be used to refer to the project directories. E.g. `./folder/**` will match a `folder` in any project directory.
+    + New options in the [fonts] section which allow to disable hinting and subpixel anti-aliasing:
+        + `anti_aliasing`: `lcd` (default - for subpixel AA), or `normal`
+        + `hinting` (`true` by default)
 + Bug fixes:
     + Fixed a crash when changing languages in the color preview widget
     + Fixed font size changing when you press ctrl after scrolling has started (thanks @onelivesleft)
 + Other changes:
     + Syntax highlighting improvements for CSS and TypeScript (thanks @simonvallz)
     + Creating cursors above and below will now skip empty lines as this is most likely the behaviour users want (thanks @onelivesleft)
+    + The Navigate To File (Ctrl-O) dialog will always show all files and folders instead of applying the ignore rules to them, which will allow to selectively open files which are normally ignored
+    + Selecting a word using double left click should now behave identically to selecting a word using the `select_word` action, highlighting only whole-word selection occurrences
+    + More robust cursor move-by-word (thanks @onelivesleft)
 
 
 # RELEASES ==================================================================
